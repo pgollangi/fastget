@@ -1,4 +1,4 @@
-package main
+package cmd
 
 import (
 	"fmt"
@@ -6,12 +6,6 @@ import (
 	"github.com/MakeNowJust/heredoc"
 	"github.com/spf13/cobra"
 )
-
-// Version is the version for fastget
-var Version string
-
-// Build holds the date bin was released
-var Build string
 
 // RootCmd is the main root/parent command
 var RootCmd = &cobra.Command{
@@ -52,6 +46,6 @@ func init() {
 }
 
 func executeVersionCmd() {
-	fmt.Printf("fast version %s (%s)\n", Version, Build)
+	fmt.Printf("fast version %s (%s)\n", version, build)
 	fmt.Println("More info: pgollangi.com/fastget")
 }
