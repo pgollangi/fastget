@@ -4,6 +4,6 @@
 
 # FastGet
 
-A CLI tool as well as go library to ultrafast download files version HTTP(s).
+A CLI tool as well as go library to ultrafast download files over HTTP(s).
 
 > Disclaimer: FastGet performance purely based on the network and CPU performance of the client machine. Also HTTP(s) endpoint must support partial request presenting `Accept-Ranges` header.
