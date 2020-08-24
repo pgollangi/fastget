@@ -1,4 +1,4 @@
-package cmd
+package commands
 
 import (
 	"fmt"
@@ -6,6 +6,12 @@ import (
 	"github.com/MakeNowJust/heredoc"
 	"github.com/spf13/cobra"
 )
+
+// Version is the version for netselect
+var Version string
+
+// Build holds the date bin was released
+var Build string
 
 // RootCmd is the main root/parent command
 var RootCmd = &cobra.Command{
@@ -46,6 +52,6 @@ func init() {
 }
 
 func executeVersionCmd() {
-	fmt.Printf("fast version %s (%s)\n", version, build)
+	fmt.Printf("fast version %s (%s)\n", Version, Build)
 	fmt.Println("More info: pgollangi.com/fastget")
 }

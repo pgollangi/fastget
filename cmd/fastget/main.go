@@ -3,6 +3,8 @@ package cmd
 import (
 	"fmt"
 	"os"
+
+	"github.com/pgollangi/fastget/commands"
 )
 
 // Version is set at build
@@ -12,7 +14,9 @@ var version string
 var build string
 
 func main() {
-	if err := RootCmd.Execute(); err != nil {
+	commands.Version = version
+	commands.Build = build
+	if err := commands.RootCmd.Execute(); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
