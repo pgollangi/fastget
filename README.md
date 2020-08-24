@@ -6,4 +6,4 @@
 
 A CLI tool as well as go library to ultrafast download files over HTTP(s).
 
-> Disclaimer: FastGet performance purely based on the network and CPU performance of the client machine. Also HTTP(s) endpoint must support partial request presenting `Accept-Ranges` header.
+> DISCLAIMER: FastGet performance purely based on the network and CPU performance of the client machine. And HTTP(s) endpoint must allow partial requests presenting `Accept-Ranges` and `Range` headers.
