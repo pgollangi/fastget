@@ -67,6 +67,8 @@ func (fg FastGetter) get() (*Result, error) {
 
 	wg, ctx := errgroup.WithContext(ctx)
 
+	start := time.Now()
+
 	for off := int64(0); off < length; off += chunkLen {
 		off := off
 		lim := off + chunkLen
@@ -78,11 +80,13 @@ func (fg FastGetter) get() (*Result, error) {
 		})
 	}
 	wg.Wait()
+	elapsed := time.Since(start)
 
 	r := &Result{
-		FileURL:    fg.FileURL,
-		Size:       length,
-		OutputFile: output,
+		FileURL:     fg.FileURL,
+		Size:        length,
+		OutputFile:  output,
+		ElapsedTime: elapsed,
 	}
 	return r, nil
 }

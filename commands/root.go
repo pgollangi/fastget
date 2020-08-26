@@ -37,6 +37,8 @@ func runCommand(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
+	threads, _ := cmd.Flags().GetInt("threads")
+
 	url := args[0]
 
 	fg, err := fastget.NewFastGetter(url)
@@ -44,11 +46,14 @@ func runCommand(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	fg.Workers = threads
 
 	result, err := fg.Get()
 	if err != nil {
 		return err
 	}
+
+	fmt.Println(result.ElapsedTime)
 
 	fmt.Printf("Success!! File downloaded: %s", result.OutputFile.Name())
 
@@ -63,7 +68,7 @@ func Execute() error {
 func init() {
 	RootCmd.Flags().BoolP("version", "v", false, "show fastget version information")
 	RootCmd.Flags().BoolP("debug", "d", false, "show debug information")
-	RootCmd.Flags().IntP("workers", "t", 1, "use <n> parellel threads")
+	RootCmd.Flags().IntP("threads", "t", 1, "use <n> parellel threads")
 	RootCmd.Flags().StringP("output", "o", ".", "output file to be written")
 }
 
