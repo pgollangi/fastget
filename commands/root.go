@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/MakeNowJust/heredoc"
+	"github.com/pgollangi/fastget"
 	"github.com/spf13/cobra"
 )
 
@@ -31,10 +32,25 @@ func runCommand(cmd *cobra.Command, args []string) error {
 	if ok, _ := cmd.Flags().GetBool("version"); ok {
 		executeVersionCmd()
 		return nil
-	} else if len(args) == 0 {
+	} else if len(args) != 1 {
 		cmd.Usage()
 		return nil
 	}
+
+	url := args[0]
+
+	fg, err := fastget.NewFastGetter(url)
+
+	if err != nil {
+		return err
+	}
+
+	result, err := fg.Get()
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("Success!! File downloaded: %s", result.OutputFile.Name())
 
 	return nil
 }

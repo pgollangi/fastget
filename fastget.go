@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path"
 	"time"
 
 	"golang.org/x/net/context/ctxhttp"
@@ -23,33 +24,33 @@ type FastGetter struct {
 type Result struct {
 	FileURL     string
 	Size        int64
-	Output      *os.File
+	OutputFile  *os.File
 	ElapsedTime time.Duration
 }
 
 // NewFastGetter creates and returns an instance of FastGetter
-func NewFastGetter(fileURL string) (fg *FastGetter, err error) {
-	fg = &FastGetter{
+func NewFastGetter(fileURL string) (*FastGetter, error) {
+	fg := &FastGetter{
 		FileURL:    fileURL,
 		Workers:    3,
-		OutputFile: ".",
+		OutputFile: path.Base(fileURL),
 	}
 	return fg, nil
 }
 
 // Get ultrafast downloads the file
-func (fg FastGetter) Get() (result *Result, err error) {
+func (fg FastGetter) Get() (*Result, error) {
 	return fg.get()
 }
 
-func (fg FastGetter) get() (result *Result, err error) {
+func (fg FastGetter) get() (*Result, error) {
 	canFastGet, length, err := fg.validateFastGet()
 	if err != nil {
 		return nil, err
 	}
 	if !canFastGet {
 		// warn
-		fmt.Println("")
+		fmt.Println("WARN: FileURL doesn't support parellel download.")
 		fg.Workers = 1
 	}
 
@@ -58,7 +59,7 @@ func (fg FastGetter) get() (result *Result, err error) {
 	ctx := context.Background()
 	client := http.DefaultClient
 
-	output, err := os.OpenFile(fg.OutputFile, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0666)
+	output, err := os.OpenFile(fg.OutputFile, os.O_CREATE|os.O_RDWR, 0666)
 
 	if err != nil {
 		return nil, err
@@ -79,20 +80,20 @@ func (fg FastGetter) get() (result *Result, err error) {
 	wg.Wait()
 
 	r := &Result{
-		FileURL: fg.FileURL,
-		Size:    length,
-		Output:  output,
+		FileURL:    fg.FileURL,
+		Size:       length,
+		OutputFile: output,
 	}
 	return r, nil
 }
 
-func (fg FastGetter) validateFastGet() (acceptRanges bool, length int64, err error) {
+func (fg FastGetter) validateFastGet() (bool, int64, error) {
 	res, err := http.Head(fg.FileURL)
 	if err != nil {
 		return false, 0, err
 	}
-	acceptRanges = res.Header.Get("Accept-Ranges") == "bytes"
-	length = res.ContentLength
+	acceptRanges := res.Header.Get("Accept-Ranges") == "bytes"
+	length := res.ContentLength
 
 	return acceptRanges, length, nil
 }
@@ -111,18 +112,43 @@ func getChunk(ctx context.Context, client *http.Client, file *os.File, url strin
 	if resp.StatusCode != http.StatusPartialContent {
 		return fmt.Errorf("server responded with %d status code, expected %d", resp.StatusCode, http.StatusPartialContent)
 	}
-	resLen := resp.ContentLength
-	buf := make([]byte, resLen)
-	resp.Body.Read(buf)
-	wn, err := file.WriteAt(buf, offset)
-	if int64(wn) != resLen {
-		return fmt.Errorf("error writing chunk. written %d, but expected %d", wn, resLen)
-	}
-	return err
-}
+	var written int64
+	contentLen := resp.ContentLength
 
-func newSectionWriter(w io.WriterAt, off int64) *sectionWriter {
-	return &sectionWriter{w, off}
+	buf := make([]byte, 4*1024)
+
+	for {
+		nr, er := resp.Body.Read(buf)
+
+		if nr > 0 {
+			nw, err := file.WriteAt(buf[0:nr], offset)
+			if err != nil {
+				return fmt.Errorf("error writing chunk. %s", err.Error())
+			}
+			if nr != nw {
+				return fmt.Errorf("error writing chunk. written %d, but expected %d", nw, nr)
+			}
+
+			offset = int64(nw) + offset
+			if nw > 0 {
+				written += int64(nw)
+			}
+		}
+
+		if er != nil {
+			if er.Error() == "EOF" {
+				if contentLen == written {
+					// Download successfully
+				} else {
+					return fmt.Errorf("error reading response. %s", er.Error())
+				}
+				break
+			}
+			return er
+		}
+
+	}
+	return nil
 }
 
 type sectionWriter struct {
