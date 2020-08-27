@@ -3,7 +3,6 @@ package fastget
 import (
 	"context"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"path"
@@ -15,9 +14,13 @@ import (
 
 // FastGetter Represents the information required to fastget a file url
 type FastGetter struct {
-	FileURL    string
-	Workers    int
-	OutputFile string
+	FileURL          string
+	Workers          int
+	OutputFile       string
+	DownloadProgress chan *ProgressUpdate
+	OnStart          func(int, int64)
+	OnProgress       func(int, int64)
+	OnFinish         func(int)
 }
 
 // Result represents the result of fastget
@@ -28,22 +31,29 @@ type Result struct {
 	ElapsedTime time.Duration
 }
 
+//ProgressUpdate respresnets
+type ProgressUpdate struct {
+	TotalSize  int64
+	Downloaded int64
+}
+
 // NewFastGetter creates and returns an instance of FastGetter
-func NewFastGetter(fileURL string) (*FastGetter, error) {
+func NewFastGetter(fileURL string, progress chan *ProgressUpdate) (*FastGetter, error) {
 	fg := &FastGetter{
-		FileURL:    fileURL,
-		Workers:    3,
-		OutputFile: path.Base(fileURL),
+		FileURL:          fileURL,
+		Workers:          3,
+		OutputFile:       path.Base(fileURL),
+		DownloadProgress: progress,
 	}
 	return fg, nil
 }
 
 // Get ultrafast downloads the file
-func (fg FastGetter) Get() (*Result, error) {
+func (fg *FastGetter) Get() (*Result, error) {
 	return fg.get()
 }
 
-func (fg FastGetter) get() (*Result, error) {
+func (fg *FastGetter) get() (*Result, error) {
 	canFastGet, length, err := fg.validateFastGet()
 	if err != nil {
 		return nil, err
@@ -54,7 +64,7 @@ func (fg FastGetter) get() (*Result, error) {
 		fg.Workers = 1
 	}
 
-	chunkLen := length / int64(fg.Workers)
+	chunkLen := int64(length / int64(fg.Workers))
 
 	ctx := context.Background()
 	client := http.DefaultClient
@@ -67,20 +77,46 @@ func (fg FastGetter) get() (*Result, error) {
 
 	wg, ctx := errgroup.WithContext(ctx)
 
-	start := time.Now()
+	startTime := time.Now()
 
-	for off := int64(0); off < length; off += chunkLen {
-		off := off
-		lim := off + chunkLen
-		if lim >= length {
-			lim = length
+	var start, end int64
+	for wid := 1; wid <= fg.Workers; wid++ {
+
+		if wid == fg.Workers {
+			end = length // last part
+		} else {
+			end = start + chunkLen
 		}
+
+		wid := wid
+		off := start
+		limit := end
+
 		wg.Go(func() error {
-			return getChunk(ctx, client, output, fg.FileURL, off, lim)
+			fg.OnStart(wid, end-start)
+			return getChunk(ctx, client, output, fg.FileURL, off, limit, fg, wid)
 		})
+
+		start = end
 	}
-	wg.Wait()
-	elapsed := time.Since(start)
+
+	// for off := int64(0); off < length; off += chunkLen {
+	// 	off := off
+	// 	lim := off + chunkLen
+	// 	if lim >= length {
+	// 		lim = length
+	// 	}
+	// 	wg.Go(func() error {
+	// 		fg.OnStart(int(off), lim-off)
+	// 		return getChunk(ctx, client, output, fg.FileURL, off, lim, fg)
+	// 	})
+	// }
+	err = wg.Wait()
+	if err != nil {
+		return nil, err
+	}
+	close(fg.DownloadProgress)
+	elapsed := time.Since(startTime)
 
 	r := &Result{
 		FileURL:     fg.FileURL,
@@ -102,11 +138,13 @@ func (fg FastGetter) validateFastGet() (bool, int64, error) {
 	return acceptRanges, length, nil
 }
 
-func getChunk(ctx context.Context, client *http.Client, file *os.File, url string, offset, limit int64) error {
+func getChunk(ctx context.Context, client *http.Client, file *os.File, url string, offset, limit int64,
+	fg *FastGetter, wid int) error {
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return err
 	}
+	// fmt.Println("Getting ", offset, limit)
 	req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", offset, limit))
 	resp, err := ctxhttp.Do(ctx, client, req)
 	if err != nil {
@@ -116,13 +154,24 @@ func getChunk(ctx context.Context, client *http.Client, file *os.File, url strin
 	if resp.StatusCode != http.StatusPartialContent {
 		return fmt.Errorf("server responded with %d status code, expected %d", resp.StatusCode, http.StatusPartialContent)
 	}
+	// fmt.Println("GOT ", offset, limit)
 	var written int64
 	contentLen := resp.ContentLength
 
-	buf := make([]byte, 4*1024)
+	buf := make([]byte, 1*1024*1024)
+	// fmt.Println(limit - offset)
+	// buf := make([]byte, limit-offset)
+
+	// _, err = io.Copy(&chunkWriter{
+	// 	file: file,
+	// 	off:  offset}, resp.Body)
+	// fmt.Println("WRITTEN ", offset, limit, wn)
+	// return err
 
 	for {
 		nr, er := resp.Body.Read(buf)
+
+		// fmt.Println("READ ", nr)
 
 		if nr > 0 {
 			nw, err := file.WriteAt(buf[0:nr], offset)
@@ -137,6 +186,7 @@ func getChunk(ctx context.Context, client *http.Client, file *os.File, url strin
 			if nw > 0 {
 				written += int64(nw)
 			}
+			fg.OnProgress(wid, written)
 		}
 
 		if er != nil {
@@ -152,16 +202,17 @@ func getChunk(ctx context.Context, client *http.Client, file *os.File, url strin
 		}
 
 	}
+	fg.OnFinish(wid)
 	return nil
 }
 
-type sectionWriter struct {
-	w   io.WriterAt
-	off int64
+type chunkWriter struct {
+	file *os.File
+	off  int64
 }
 
-func (w *sectionWriter) Write(p []byte) (n int, err error) {
-	n, err = w.w.WriteAt(p, w.off)
-	w.off += int64(n)
+func (cw *chunkWriter) Write(p []byte) (n int, err error) {
+	n, err = cw.file.WriteAt(p, cw.off)
+	cw.off += int64(n)
 	return
 }
