@@ -14,13 +14,12 @@ import (
 
 // FastGetter Represents the information required to fastget a file url
 type FastGetter struct {
-	FileURL          string
-	Workers          int
-	OutputFile       string
-	DownloadProgress chan *ProgressUpdate
-	OnStart          func(int, int64)
-	OnProgress       func(int, int64)
-	OnFinish         func(int)
+	FileURL    string
+	Workers    int
+	OutputFile string
+	OnStart    func(int, int64)
+	OnProgress func(int, int64)
+	OnFinish   func(int)
 }
 
 // Result represents the result of fastget
@@ -38,12 +37,11 @@ type ProgressUpdate struct {
 }
 
 // NewFastGetter creates and returns an instance of FastGetter
-func NewFastGetter(fileURL string, progress chan *ProgressUpdate) (*FastGetter, error) {
+func NewFastGetter(fileURL string) (*FastGetter, error) {
 	fg := &FastGetter{
-		FileURL:          fileURL,
-		Workers:          3,
-		OutputFile:       path.Base(fileURL),
-		DownloadProgress: progress,
+		FileURL:    fileURL,
+		Workers:    3,
+		OutputFile: path.Base(fileURL),
 	}
 	return fg, nil
 }
@@ -93,29 +91,17 @@ func (fg *FastGetter) get() (*Result, error) {
 		limit := end
 
 		wg.Go(func() error {
-			fg.OnStart(wid, end-start)
+			fg.OnStart(wid, limit-off)
 			return getChunk(ctx, client, output, fg.FileURL, off, limit, fg, wid)
 		})
 
 		start = end
 	}
 
-	// for off := int64(0); off < length; off += chunkLen {
-	// 	off := off
-	// 	lim := off + chunkLen
-	// 	if lim >= length {
-	// 		lim = length
-	// 	}
-	// 	wg.Go(func() error {
-	// 		fg.OnStart(int(off), lim-off)
-	// 		return getChunk(ctx, client, output, fg.FileURL, off, lim, fg)
-	// 	})
-	// }
 	err = wg.Wait()
 	if err != nil {
 		return nil, err
 	}
-	close(fg.DownloadProgress)
 	elapsed := time.Since(startTime)
 
 	r := &Result{

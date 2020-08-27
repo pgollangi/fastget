@@ -2,10 +2,14 @@ package commands
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 
 	"github.com/MakeNowJust/heredoc"
 	"github.com/pgollangi/fastget"
 	"github.com/spf13/cobra"
+
+	"github.com/cheggaaa/pb"
 )
 
 // Version is the version for netselect
@@ -48,14 +52,52 @@ func runCommand(cmd *cobra.Command, args []string) error {
 	}
 	fg.Workers = threads
 
+	bars := make(map[int]*pb.ProgressBar)
+
+	pbPool := pb.NewPool()
+
+	var counter int
+
+	fg.OnStart = func(worker int, totalSize int64) {
+		bID := counter + 1
+		counter = bID
+		if bID == 1 {
+			fmt.Println("Download started..")
+		}
+		bar := pb.New64(totalSize).Prefix(fmt.Sprintf("Part %d ", bID))
+		bar.ShowSpeed = true
+		bar.ShowElapsedTime = true
+		bar.ShowPercent = true
+		bar.SetMaxWidth(100)
+		bar.SetUnits(pb.U_BYTES_DEC)
+		bars[worker] = bar
+		pbPool.Add(bar)
+		if counter == threads {
+			pbPool.Start()
+		}
+	}
+
+	fg.OnProgress = func(worker int, download int64) {
+		bars[worker].Set64(download)
+
+	}
+
+	fg.OnFinish = func(worker int) {
+		bars[worker].Finish()
+	}
+
 	result, err := fg.Get()
 	if err != nil {
 		return err
 	}
 
-	fmt.Println(result.ElapsedTime)
+	pbPool.Stop()
 
-	fmt.Printf("Success!! File downloaded: %s", result.OutputFile.Name())
+	pwd, err := os.Getwd()
+
+	oFile := filepath.Join(pwd, result.OutputFile.Name())
+
+	fmt.Printf("Download finished in %s. File: %s", result.ElapsedTime, oFile)
 
 	return nil
 }
@@ -68,7 +110,7 @@ func Execute() error {
 func init() {
 	RootCmd.Flags().BoolP("version", "v", false, "show fastget version information")
 	RootCmd.Flags().BoolP("debug", "d", false, "show debug information")
-	RootCmd.Flags().IntP("threads", "t", 1, "use <n> parellel threads")
+	RootCmd.Flags().IntP("workers", "w", 3, "use <n> parellel threads")
 	RootCmd.Flags().StringP("output", "o", ".", "output file to be written")
 }
 
