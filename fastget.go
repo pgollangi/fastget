@@ -30,12 +30,6 @@ type Result struct {
 	ElapsedTime time.Duration
 }
 
-//ProgressUpdate respresnets
-type ProgressUpdate struct {
-	TotalSize  int64
-	Downloaded int64
-}
-
 // NewFastGetter creates and returns an instance of FastGetter
 func NewFastGetter(fileURL string) (*FastGetter, error) {
 	fg := &FastGetter{
@@ -52,7 +46,7 @@ func (fg *FastGetter) Get() (*Result, error) {
 }
 
 func (fg *FastGetter) get() (*Result, error) {
-	canFastGet, length, err := fg.validateFastGet()
+	canFastGet, length, err := fg.checkEligibility()
 	if err != nil {
 		return nil, err
 	}
@@ -88,11 +82,10 @@ func (fg *FastGetter) get() (*Result, error) {
 
 		wid := wid
 		off := start
-		limit := end
+		lim := end
 
 		wg.Go(func() error {
-			fg.OnStart(wid, limit-off)
-			return getChunk(ctx, client, output, fg.FileURL, off, limit, fg, wid)
+			return fg.getChunk(ctx, client, output, fg.FileURL, off, lim, wid)
 		})
 
 		start = end
@@ -104,16 +97,16 @@ func (fg *FastGetter) get() (*Result, error) {
 	}
 	elapsed := time.Since(startTime)
 
-	r := &Result{
+	result := &Result{
 		FileURL:     fg.FileURL,
 		Size:        length,
 		OutputFile:  output,
 		ElapsedTime: elapsed,
 	}
-	return r, nil
+	return result, nil
 }
 
-func (fg FastGetter) validateFastGet() (bool, int64, error) {
+func (fg FastGetter) checkEligibility() (bool, int64, error) {
 	res, err := http.Head(fg.FileURL)
 	if err != nil {
 		return false, 0, err
@@ -124,14 +117,17 @@ func (fg FastGetter) validateFastGet() (bool, int64, error) {
 	return acceptRanges, length, nil
 }
 
-func getChunk(ctx context.Context, client *http.Client, file *os.File, url string, offset, limit int64,
-	fg *FastGetter, wid int) error {
+func (fg FastGetter) getChunk(
+	ctx context.Context, client *http.Client, file *os.File, url string, off, lim int64, wid int) error {
+	if fg.OnStart != nil {
+		fg.OnStart(wid, lim-off)
+	}
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return err
 	}
 	// fmt.Println("Getting ", offset, limit)
-	req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", offset, limit))
+	req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", off, lim))
 	resp, err := ctxhttp.Do(ctx, client, req)
 	if err != nil {
 		return err
@@ -145,22 +141,11 @@ func getChunk(ctx context.Context, client *http.Client, file *os.File, url strin
 	contentLen := resp.ContentLength
 
 	buf := make([]byte, 1*1024*1024)
-	// fmt.Println(limit - offset)
-	// buf := make([]byte, limit-offset)
-
-	// _, err = io.Copy(&chunkWriter{
-	// 	file: file,
-	// 	off:  offset}, resp.Body)
-	// fmt.Println("WRITTEN ", offset, limit, wn)
-	// return err
-
 	for {
 		nr, er := resp.Body.Read(buf)
 
-		// fmt.Println("READ ", nr)
-
 		if nr > 0 {
-			nw, err := file.WriteAt(buf[0:nr], offset)
+			nw, err := file.WriteAt(buf[0:nr], off)
 			if err != nil {
 				return fmt.Errorf("error writing chunk. %s", err.Error())
 			}
@@ -168,11 +153,13 @@ func getChunk(ctx context.Context, client *http.Client, file *os.File, url strin
 				return fmt.Errorf("error writing chunk. written %d, but expected %d", nw, nr)
 			}
 
-			offset = int64(nw) + offset
+			off = int64(nw) + off
 			if nw > 0 {
 				written += int64(nw)
 			}
-			fg.OnProgress(wid, written)
+			if fg.OnProgress != nil {
+				fg.OnProgress(wid, written)
+			}
 		}
 
 		if er != nil {
@@ -188,17 +175,8 @@ func getChunk(ctx context.Context, client *http.Client, file *os.File, url strin
 		}
 
 	}
-	fg.OnFinish(wid)
+	if fg.OnFinish != nil {
+		fg.OnFinish(wid)
+	}
 	return nil
-}
-
-type chunkWriter struct {
-	file *os.File
-	off  int64
-}
-
-func (cw *chunkWriter) Write(p []byte) (n int, err error) {
-	n, err = cw.file.WriteAt(p, cw.off)
-	cw.off += int64(n)
-	return
 }
