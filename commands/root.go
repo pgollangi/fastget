@@ -113,7 +113,7 @@ func runCommand(cmd *cobra.Command, args []string) error {
 
 	oFile := filepath.Join(pwd, result.OutputFile.Name())
 
-	fmt.Printf("Download finished in %s. File: %s", result.ElapsedTime, oFile)
+	fmt.Printf("Download finished in %s. File: %s", result.ElapsedTime.Round(time.Second), oFile)
 
 	return nil
 }
