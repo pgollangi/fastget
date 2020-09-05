@@ -4,12 +4,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/MakeNowJust/heredoc"
 	"github.com/pgollangi/fastget"
 	"github.com/spf13/cobra"
 
-	"github.com/cheggaaa/pb"
+	"github.com/vbauerster/mpb/v5"
+	"github.com/vbauerster/mpb/v5/decor"
 )
 
 // Version is the version for netselect
@@ -32,6 +34,11 @@ var RootCmd = &cobra.Command{
 	RunE: runCommand,
 }
 
+type barStatus struct {
+	iT  time.Time
+	bar *mpb.Bar
+}
+
 func runCommand(cmd *cobra.Command, args []string) error {
 	if ok, _ := cmd.Flags().GetBool("version"); ok {
 		executeVersionCmd()
@@ -41,7 +48,7 @@ func runCommand(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	threads, _ := cmd.Flags().GetInt("threads")
+	threads, _ := cmd.Flags().GetInt("workers")
 
 	url := args[0]
 
@@ -52,11 +59,13 @@ func runCommand(cmd *cobra.Command, args []string) error {
 	}
 	fg.Workers = threads
 
-	bars := make(map[int]*pb.ProgressBar)
-
-	pbPool := pb.NewPool()
+	mpbars := make(map[int]*barStatus)
 
 	var counter int
+
+	mp := mpb.New(
+		mpb.WithWidth(100),
+	)
 
 	fg.OnStart = func(worker int, totalSize int64) {
 		bID := counter + 1
@@ -64,26 +73,33 @@ func runCommand(cmd *cobra.Command, args []string) error {
 		if bID == 1 {
 			fmt.Println("Download started..")
 		}
-		bar := pb.New64(totalSize).Prefix(fmt.Sprintf("Part %d ", bID))
-		bar.ShowSpeed = true
-		bar.ShowElapsedTime = true
-		bar.ShowPercent = true
-		bar.SetMaxWidth(100)
-		bar.SetUnits(pb.U_BYTES_DEC)
-		bars[worker] = bar
-		pbPool.Add(bar)
-		if counter == threads {
-			pbPool.Start()
+
+		mpbar := mp.AddBar(totalSize, mpb.BarStyle("[=>-|"),
+			mpb.PrependDecorators(
+				decor.CountersKiloByte("% 6.2f / % .2f"),
+				decor.Percentage(decor.WCSyncSpace),
+			),
+			mpb.AppendDecorators(
+				decor.EwmaETA(decor.ET_STYLE_GO, 90),
+				decor.Name(" ] "),
+				decor.EwmaSpeed(decor.UnitKB, "% .2f", 60),
+			))
+
+		mpbars[worker] = &barStatus{
+			bar: mpbar,
+			iT:  time.Now(),
 		}
+
 	}
 
 	fg.OnProgress = func(worker int, download int64) {
-		bars[worker].Set64(download)
+		barStatus := mpbars[worker]
 
-	}
+		dur := time.Since(barStatus.iT)
 
-	fg.OnFinish = func(worker int) {
-		bars[worker].Finish()
+		barStatus.bar.SetCurrent(download)
+		barStatus.bar.DecoratorEwmaUpdate(dur)
+		barStatus.iT = time.Now()
 	}
 
 	result, err := fg.Get()
@@ -91,7 +107,7 @@ func runCommand(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	pbPool.Stop()
+	mp.Wait()
 
 	pwd, err := os.Getwd()
 
