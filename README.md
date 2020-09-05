@@ -113,4 +113,4 @@ Copyright © [Prasanna Kumar](https://pgollangi.com)
 `fastget` is open-sourced software licensed under the [MIT](LICENSE) license.
 
 ## Author
-Built with ❤ by [Prasanna Kumar](https://pgollangi.com)
+Built with ❤ by [Prasanna Kumar](https://pgollangi.com/tabs/about/)
