@@ -9,6 +9,9 @@ A CLI tool as well as go library to ultrafast download files over HTTP(s).
 > DISCLAIMER: FastGet performance heavily reliant on the network and CPU performance of the client machine. More importantly HTTP(s) endpoint must allow partial requests presenting `Accept-Ranges` and accepting `Range` headers.
 
 
+## Demo 
+![fastget Demo](assets/fastget_demo.gif)
+
 ## Usage
 `fastget` available as Commnad-Line tool and Go library.
 ### Commnad-Line
@@ -18,12 +21,12 @@ fastget [options] <URL_TO_DOWNLOAD>
 ```
 #### Examples
 ```sh
-$ fastget http://speedtest.tele2.net/100MB.zip
+$ fastget http://speedtest.tele2.net/10MB.zip
 Download started..
 3.50 MB / 3.50 MB 100 % [===========================================================================| 0s ] 267.59 KB/s
 3.50 MB / 3.50 MB 100 % [===========================================================================| 0s ] 165.65 KB/s
 3.50 MB / 3.50 MB 100 % [===========================================================================| 0s ] 116.10 KB/s
-Download finished in 4s. File: E:\dev2\fastget\10MB.zip
+Download finished in 3s. File: E:\10MB.zip
 ```
 
 Read the  [documentation](https://dev.pgollangi.com/fastget)  for more information on the CLI usage.
@@ -105,11 +108,9 @@ Please read the [Contributions](.github/CONTRIBUTING.md) and [Code of conduct](.
 Feel free to open an issue or submit a pull request!
 
 ## License
-
-[MIT](LICENSE)
-
 Copyright © [Prasanna Kumar](https://pgollangi.com)
 
-## Author
+`fastget` is open-sourced software licensed under the [MIT](LICENSE) license.
 
+## Author
 Built with ❤ by [Prasanna Kumar](https://pgollangi.com)
