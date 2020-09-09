@@ -17,9 +17,17 @@ type FastGetter struct {
 	FileURL    string
 	Workers    int
 	OutputFile string
-	OnStart    func(int, int64)
+	// Headers to be included to while making requests
+	Headers map[string]string
+	// OnBeforeStart to be called before even download start
+	OnBeforeStart func(int64, int64)
+
+	// OnStart to be called on started downloading a chunk / a part
+	OnStart func(int, int64)
+	// OnProgress to be called on change in progress of downloading a chunk / a part
 	OnProgress func(int, int64)
-	OnFinish   func(int)
+	// OnFinish to be called on finished downloading a chunk / a part
+	OnFinish func(int)
 }
 
 // Result represents the result of fastget
@@ -57,6 +65,10 @@ func (fg *FastGetter) get() (*Result, error) {
 	}
 
 	chunkLen := int64(length / int64(fg.Workers))
+
+	if fg.OnBeforeStart != nil {
+		fg.OnBeforeStart(length, chunkLen)
+	}
 
 	ctx := context.Background()
 	client := http.DefaultClient
@@ -107,7 +119,14 @@ func (fg *FastGetter) get() (*Result, error) {
 }
 
 func (fg FastGetter) checkEligibility() (bool, int64, error) {
-	res, err := http.Head(fg.FileURL)
+	req, err := http.NewRequest("HEAD", fg.FileURL, nil)
+	if err != nil {
+		return false, 0, err
+	}
+	for key, value := range fg.Headers {
+		req.Header.Add(key, value)
+	}
+	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return false, 0, err
 	}
@@ -128,6 +147,10 @@ func (fg FastGetter) getChunk(
 	}
 	// fmt.Println("Getting ", offset, limit)
 	req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", off, lim))
+	// Add custom headers
+	for key, value := range fg.Headers {
+		req.Header.Add(key, value)
+	}
 	resp, err := ctxhttp.Do(ctx, client, req)
 	if err != nil {
 		return err
