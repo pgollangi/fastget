@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/MakeNowJust/heredoc"
@@ -30,7 +31,9 @@ var RootCmd = &cobra.Command{
 	SilenceErrors: true,
 	SilenceUsage:  true,
 	Example: heredoc.Doc(`
-		$ fastget https://file.example.com
+		$ fastget https://file.example.com // Basic Usage
+		$ fastget http://speedtest.tele2.net/10MB.zip -H "Authorization: Basic ASYFASUF" // Custom Header
+		$ fastget http://speedtest.tele2.net/10MB.zip -w 6 // Increased no. of workers
 		$ fastget -v
 		`),
 	RunE: runCommand,
@@ -52,6 +55,8 @@ func runCommand(cmd *cobra.Command, args []string) error {
 
 	threads, _ := cmd.Flags().GetInt("workers")
 
+	headers, _ := cmd.Flags().GetStringArray("header")
+
 	url := args[0]
 
 	fg, err := fastget.NewFastGetter(url)
@@ -60,6 +65,12 @@ func runCommand(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	fg.Workers = threads
+
+	for _, header := range headers {
+		split := strings.Split(header, ":")
+		fg.Headers[split[0]] = split[1]
+		fmt.Println(header)
+	}
 
 	fmt.Println("Initializing download..")
 
@@ -129,6 +140,7 @@ func init() {
 	RootCmd.Flags().BoolP("debug", "d", false, "show debug information")
 	RootCmd.Flags().IntP("workers", "w", 3, "use <n> parellel threads")
 	RootCmd.Flags().StringP("output", "o", ".", "output file to be written")
+	RootCmd.Flags().StringArrayP("header", "H", []string{}, "output file to be written")
 }
 
 func executeVersionCmd() {

@@ -44,6 +44,7 @@ func NewFastGetter(fileURL string) (*FastGetter, error) {
 		FileURL:    fileURL,
 		Workers:    3,
 		OutputFile: path.Base(fileURL),
+		Headers:    make(map[string]string),
 	}
 	return fg, nil
 }
