@@ -65,6 +65,7 @@ func runCommand(cmd *cobra.Command, args []string) error {
 
 	mp := mpb.New(
 		mpb.WithWidth(100),
+		mpb.WithRefreshRate(240*time.Millisecond),
 	)
 
 	fg.OnStart = func(worker int, totalSize int64) {
