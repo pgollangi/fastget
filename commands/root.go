@@ -12,6 +12,8 @@ import (
 
 	"github.com/vbauerster/mpb/v5"
 	"github.com/vbauerster/mpb/v5/decor"
+
+	"github.com/inhies/go-bytesize"
 )
 
 // Version is the version for netselect
@@ -59,22 +61,20 @@ func runCommand(cmd *cobra.Command, args []string) error {
 	}
 	fg.Workers = threads
 
-	mpbars := make(map[int]*barStatus)
+	fmt.Println("Initializing download..")
 
-	var counter int
+	mpbars := make(map[int]*barStatus)
 
 	mp := mpb.New(
 		mpb.WithWidth(100),
 		mpb.WithRefreshRate(240*time.Millisecond),
 	)
 
-	fg.OnStart = func(worker int, totalSize int64) {
-		bID := counter + 1
-		counter = bID
-		if bID == 1 {
-			fmt.Println("Download started..")
-		}
+	fg.OnBeforeStart = func(filesize int64, chunckLen int64) {
+		fmt.Printf("File size : %s\n", bytesize.New(float64(filesize)))
+	}
 
+	fg.OnStart = func(worker int, totalSize int64) {
 		mpbar := mp.AddBar(totalSize, mpb.BarStyle("[=>-|"),
 			mpb.PrependDecorators(
 				decor.CountersKiloByte("% 6.2f / % .2f"),
