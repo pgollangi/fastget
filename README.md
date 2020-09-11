@@ -1,5 +1,8 @@
 ![build](https://github.com/pgollangi/fastget/workflows/build/badge.svg)
 [![Go Report Card](https://goreportcard.com/badge/github.com/pgollangi/fastget)](https://goreportcard.com/report/github.com/pgollangi/fastget)
+![GitHub go.mod Go version](https://img.shields.io/github/go-mod/go-version/pgollangi/fastget)
+![GitHub release (latest by date)](https://img.shields.io/github/v/release/pgollangi/fastget)
+[![PkgGoDev](https://pkg.go.dev/badge/github.com/pgollangi/netselect)](https://pkg.go.dev/github.com/pgollangi/fastget)
 ![License: MIT](https://img.shields.io/github/license/pgollangi/fastget)
 
 # FastGet
