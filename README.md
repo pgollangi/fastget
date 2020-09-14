@@ -4,7 +4,7 @@
 ![GitHub release (latest by date)](https://img.shields.io/github/v/release/pgollangi/fastget)
 [![PkgGoDev](https://pkg.go.dev/badge/github.com/pgollangi/netselect)](https://pkg.go.dev/github.com/pgollangi/fastget)
 [![Maintainability](https://api.codeclimate.com/v1/badges/76a0d1d3903c6f0683c7/maintainability)](https://codeclimate.com/github/pgollangi/fastget/maintainability)
-![Code Climate technical debt](https://img.shields.io/codeclimate/tech-debt/pgollangi/fastget)
+[![Code Climate technical debt](https://img.shields.io/codeclimate/tech-debt/pgollangi/fastget)](https://codeclimate.com/github/pgollangi/fastget/trends/technical_debt)
 ![License: MIT](https://img.shields.io/github/license/pgollangi/fastget)
 
 # FastGet
