@@ -3,6 +3,7 @@ package fastget
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path"
@@ -28,6 +29,16 @@ type FastGetter struct {
 	OnProgress func(int, int64)
 	// OnFinish to be called on finished downloading a chunk / a part
 	OnFinish func(int)
+}
+
+type chunkInfo struct {
+	ctx      context.Context
+	client   *http.Client
+	output   io.WriterAt
+	url      string
+	off, lim int64
+	wid      int
+	headers  map[string]string
 }
 
 // Result represents the result of fastget
@@ -98,7 +109,16 @@ func (fg *FastGetter) get() (*Result, error) {
 		lim := end
 
 		wg.Go(func() error {
-			return fg.getChunk(ctx, client, output, fg.FileURL, off, lim, wid)
+			return fg.getChunk(&chunkInfo{
+				ctx:     ctx,
+				client:  client,
+				output:  output,
+				url:     fg.FileURL,
+				off:     off,
+				lim:     lim,
+				wid:     wid,
+				headers: fg.Headers,
+			})
 		})
 
 		start = end
@@ -137,30 +157,36 @@ func (fg FastGetter) checkEligibility() (bool, int64, error) {
 	return acceptRanges, length, nil
 }
 
-func (fg FastGetter) getChunk(
-	ctx context.Context, client *http.Client, file *os.File, url string, off, lim int64, wid int) error {
-	if fg.OnStart != nil {
-		fg.OnStart(wid, lim-off)
-	}
-	req, err := http.NewRequest("GET", url, nil)
+func (cInfo chunkInfo) makeRequest() (*http.Response, error) {
+	req, err := http.NewRequest("GET", cInfo.url, nil)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	// fmt.Println("Getting ", offset, limit)
-	req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", off, lim))
+	req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", cInfo.off, cInfo.lim))
 	// Add custom headers
-	for key, value := range fg.Headers {
+	for key, value := range cInfo.headers {
 		req.Header.Add(key, value)
 	}
-	resp, err := ctxhttp.Do(ctx, client, req)
+
+	resp, err := ctxhttp.Do(cInfo.ctx, cInfo.client, req)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusPartialContent {
+		return nil, fmt.Errorf("server responded with %d status code, expected %d", resp.StatusCode, http.StatusPartialContent)
+	}
+	return resp, nil
+}
+
+func (fg FastGetter) getChunk(cInfo *chunkInfo) error {
+	if fg.OnStart != nil {
+		fg.OnStart(cInfo.wid, cInfo.lim-cInfo.off)
+	}
+	resp, err := cInfo.makeRequest()
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusPartialContent {
-		return fmt.Errorf("server responded with %d status code, expected %d", resp.StatusCode, http.StatusPartialContent)
-	}
-	// fmt.Println("GOT ", offset, limit)
 	var written int64
 	contentLen := resp.ContentLength
 
@@ -169,7 +195,7 @@ func (fg FastGetter) getChunk(
 		nr, er := resp.Body.Read(buf)
 
 		if nr > 0 {
-			nw, err := file.WriteAt(buf[0:nr], off)
+			nw, err := cInfo.output.WriteAt(buf[0:nr], cInfo.off)
 			if err != nil {
 				return fmt.Errorf("error writing chunk. %s", err.Error())
 			}
@@ -177,12 +203,12 @@ func (fg FastGetter) getChunk(
 				return fmt.Errorf("error writing chunk. written %d, but expected %d", nw, nr)
 			}
 
-			off = int64(nw) + off
+			cInfo.off = int64(nw) + cInfo.off
 			if nw > 0 {
 				written += int64(nw)
 			}
 			if fg.OnProgress != nil {
-				fg.OnProgress(wid, written)
+				fg.OnProgress(cInfo.wid, written)
 			}
 		}
 
@@ -197,10 +223,9 @@ func (fg FastGetter) getChunk(
 			}
 			return er
 		}
-
 	}
 	if fg.OnFinish != nil {
-		fg.OnFinish(wid)
+		fg.OnFinish(cInfo.wid)
 	}
 	return nil
 }
