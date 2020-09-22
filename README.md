@@ -58,6 +58,16 @@ Read the  [API documentation](https://pkg.go.dev/github.com/pgollangi/fastget) f
 
 ## Installation 
 
+Download suitable binary for your OS at the [releases page](https://github.com/pgollangi/fastget/releases/latest).
+
+### Bash Install
+You can install or update `fastget` with:
+
+```
+curl -s https://raw.githubusercontent.com/pgollangi/fastget/master/scripts/install.sh | sudo bash
+```
+Installs into `/usr/local/bin`
+
 ### Scoop
 ```sh
 scoop bucket add pgollangi-bucket https://github.com/pgollangi/scoop-bucket.git
