@@ -13,7 +13,7 @@ A CLI tool as well as go library to ultrafast download files over HTTP(s).
 
 
 ## Demo 
-![fastget Demo](assets/fastget_demo.gif)
+![fastget Demo](examples/fastget_demo.gif)
 
 ## Usage
 `fastget` available as Commnad-Line tool and Go library.
