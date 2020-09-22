@@ -15,8 +15,11 @@ import (
 
 // FastGetter Represents the information required to fastget a file url
 type FastGetter struct {
-	FileURL    string
-	Workers    int
+	// URL of the file to be downloaded
+	URL string
+	// Number of concurrent worked should be used to download file
+	Workers int
+	// Path of output file to write download
 	OutputFile string
 	// Headers to be included to while making requests
 	Headers map[string]string
@@ -31,6 +34,7 @@ type FastGetter struct {
 	OnFinish func(int)
 }
 
+// chunkInfo holds the information about a chunk to be downloaded
 type chunkInfo struct {
 	ctx      context.Context
 	client   *http.Client
@@ -43,18 +47,18 @@ type chunkInfo struct {
 
 // Result represents the result of fastget
 type Result struct {
-	FileURL     string
+	URL         string
 	Size        int64
 	OutputFile  *os.File
 	ElapsedTime time.Duration
 }
 
 // NewFastGetter creates and returns an instance of FastGetter
-func NewFastGetter(fileURL string) (*FastGetter, error) {
+func NewFastGetter(url string) (*FastGetter, error) {
 	fg := &FastGetter{
-		FileURL:    fileURL,
+		URL:        url,
 		Workers:    3,
-		OutputFile: path.Base(fileURL),
+		OutputFile: path.Base(url),
 		Headers:    make(map[string]string),
 	}
 	return fg, nil
@@ -71,7 +75,6 @@ func (fg *FastGetter) get() (*Result, error) {
 		return nil, err
 	}
 	if !canFastGet {
-		// warn
 		fmt.Println("WARN: FileURL doesn't support parellel download.")
 		fg.Workers = 1
 	}
@@ -86,13 +89,11 @@ func (fg *FastGetter) get() (*Result, error) {
 	client := http.DefaultClient
 
 	output, err := os.OpenFile(fg.OutputFile, os.O_CREATE|os.O_RDWR, 0666)
-
 	if err != nil {
 		return nil, err
 	}
 
 	wg, ctx := errgroup.WithContext(ctx)
-
 	startTime := time.Now()
 
 	var start, end int64
@@ -110,14 +111,8 @@ func (fg *FastGetter) get() (*Result, error) {
 
 		wg.Go(func() error {
 			return fg.getChunk(&chunkInfo{
-				ctx:     ctx,
-				client:  client,
-				output:  output,
-				url:     fg.FileURL,
-				off:     off,
-				lim:     lim,
-				wid:     wid,
-				headers: fg.Headers,
+				ctx: ctx, client: client, output: output, url: fg.URL,
+				off: off, lim: lim, wid: wid, headers: fg.Headers,
 			})
 		})
 
@@ -131,7 +126,7 @@ func (fg *FastGetter) get() (*Result, error) {
 	elapsed := time.Since(startTime)
 
 	result := &Result{
-		FileURL:     fg.FileURL,
+		URL:         fg.URL,
 		Size:        length,
 		OutputFile:  output,
 		ElapsedTime: elapsed,
@@ -140,7 +135,7 @@ func (fg *FastGetter) get() (*Result, error) {
 }
 
 func (fg FastGetter) checkEligibility() (bool, int64, error) {
-	req, err := http.NewRequest("HEAD", fg.FileURL, nil)
+	req, err := http.NewRequest("HEAD", fg.URL, nil)
 	if err != nil {
 		return false, 0, err
 	}
@@ -157,6 +152,7 @@ func (fg FastGetter) checkEligibility() (bool, int64, error) {
 	return acceptRanges, length, nil
 }
 
+// makeRequest performs the HTTP request and returns the response object
 func (cInfo chunkInfo) makeRequest() (*http.Response, error) {
 	req, err := http.NewRequest("GET", cInfo.url, nil)
 	if err != nil {
@@ -178,6 +174,7 @@ func (cInfo chunkInfo) makeRequest() (*http.Response, error) {
 	return resp, nil
 }
 
+// getChunk fetches the part of file to download
 func (fg FastGetter) getChunk(cInfo *chunkInfo) error {
 	if fg.OnStart != nil {
 		fg.OnStart(cInfo.wid, cInfo.lim-cInfo.off)
