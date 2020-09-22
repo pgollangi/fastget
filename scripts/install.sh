@@ -46,7 +46,6 @@ case $(uname -s) in
 esac
 
 latest="$(curl -sL 'https://api.github.com/repos/pgollangi/fastget/releases/latest' | grep 'tag_name' | grep --only 'v[0-9\.]\+' | cut -c 2-)"
-echo $machine
 curl -sL "https://github.com/pgollangi/fastget/releases/download/v${latest}/fastget_${latest}_${os}_${machine}.tar.gz" | tar -C /tmp/ -xzf -
 install -m755 /tmp/fastget $BINDIR/fastget
 echo "Successfully installed fastget into $BINDIR/"
