@@ -34,7 +34,7 @@ Download started..
 Download finished in 3s. File: E:\10MB.zip
 ```
 
-Read the  [documentation](https://dev.pgollangi.com/fastget)  for more information on the CLI usage.
+Read the  [documentation](https://pgollangi.github.io/fastget)  for more information on the CLI usage.
 
 ### Go Library
 
