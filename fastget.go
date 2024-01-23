@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path"
@@ -75,7 +76,7 @@ func (fg *FastGetter) get() (*Result, error) {
 		return nil, err
 	}
 	if !canFastGet {
-		fmt.Println("WARN: FileURL doesn't support parellel download.")
+		log.Println("WARN: FileURL doesn't support parellel download.")
 		fg.Workers = 1
 	}
 
@@ -146,6 +147,7 @@ func (fg FastGetter) checkEligibility() (bool, int64, error) {
 	if err != nil {
 		return false, 0, err
 	}
+	defer res.Body.Close()
 	acceptRanges := res.Header.Get("Accept-Ranges") == "bytes"
 	length := res.ContentLength
 
@@ -168,9 +170,6 @@ func (cInfo chunkInfo) makeRequest() (*http.Response, error) {
 	if err != nil {
 		return nil, err
 	}
-	if resp.StatusCode != http.StatusPartialContent {
-		return nil, fmt.Errorf("server responded with %d status code, expected %d", resp.StatusCode, http.StatusPartialContent)
-	}
 	return resp, nil
 }
 
@@ -184,6 +183,10 @@ func (fg FastGetter) getChunk(cInfo *chunkInfo) error {
 		return err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusPartialContent {
+		return fmt.Errorf("server responded with %d status code, expected %d", resp.StatusCode, http.StatusPartialContent)
+	}
+
 	var written int64
 	contentLen := resp.ContentLength
 
