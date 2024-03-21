@@ -10,12 +10,13 @@ import (
 	"path"
 	"time"
 
-	"golang.org/x/net/context/ctxhttp"
 	"golang.org/x/sync/errgroup"
 )
 
 // FastGetter Represents the information required to fastget a file url
 type FastGetter struct {
+	// Client to be used to make requests
+	Client *http.Client
 	// URL of the file to be downloaded
 	URL string
 	// Number of concurrent worked should be used to download file
@@ -37,8 +38,6 @@ type FastGetter struct {
 
 // chunkInfo holds the information about a chunk to be downloaded
 type chunkInfo struct {
-	ctx      context.Context
-	client   *http.Client
 	output   io.WriterAt
 	url      string
 	off, lim int64
@@ -57,6 +56,7 @@ type Result struct {
 // NewFastGetter creates and returns an instance of FastGetter
 func NewFastGetter(url string) (*FastGetter, error) {
 	fg := &FastGetter{
+		Client:     http.DefaultClient,
 		URL:        url,
 		Workers:    3,
 		OutputFile: path.Base(url),
@@ -67,11 +67,16 @@ func NewFastGetter(url string) (*FastGetter, error) {
 
 // Get ultrafast downloads the file
 func (fg *FastGetter) Get() (*Result, error) {
-	return fg.get()
+	return fg.get(context.Background())
 }
 
-func (fg *FastGetter) get() (*Result, error) {
-	canFastGet, length, err := fg.checkEligibility()
+// GetCtx ultrafast downloads the file
+func (fg *FastGetter) GetCtx(ctx context.Context) (*Result, error) {
+	return fg.get(ctx)
+}
+
+func (fg *FastGetter) get(ctx context.Context) (*Result, error) {
+	canFastGet, length, err := fg.checkEligibility(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -80,14 +85,11 @@ func (fg *FastGetter) get() (*Result, error) {
 		fg.Workers = 1
 	}
 
-	chunkLen := int64(length / int64(fg.Workers))
+	chunkLen := length / int64(fg.Workers)
 
 	if fg.OnBeforeStart != nil {
 		fg.OnBeforeStart(length, chunkLen)
 	}
-
-	ctx := context.Background()
-	client := http.DefaultClient
 
 	output, err := os.OpenFile(fg.OutputFile, os.O_CREATE|os.O_RDWR, 0666)
 	if err != nil {
@@ -111,8 +113,8 @@ func (fg *FastGetter) get() (*Result, error) {
 		lim := end
 
 		wg.Go(func() error {
-			return fg.getChunk(&chunkInfo{
-				ctx: ctx, client: client, output: output, url: fg.URL,
+			return fg.getChunk(ctx, &chunkInfo{
+				output: output, url: fg.URL,
 				off: off, lim: lim, wid: wid, headers: fg.Headers,
 			})
 		})
@@ -135,15 +137,16 @@ func (fg *FastGetter) get() (*Result, error) {
 	return result, nil
 }
 
-func (fg FastGetter) checkEligibility() (bool, int64, error) {
-	req, err := http.NewRequest("HEAD", fg.URL, nil)
+func (fg *FastGetter) checkEligibility(ctx context.Context) (bool, int64, error) {
+	req, err := http.NewRequestWithContext(ctx, "HEAD", fg.URL, nil)
 	if err != nil {
 		return false, 0, err
 	}
 	for key, value := range fg.Headers {
 		req.Header.Add(key, value)
 	}
-	res, err := http.DefaultClient.Do(req)
+
+	res, err := fg.Client.Do(req)
 	if err != nil {
 		return false, 0, err
 	}
@@ -155,8 +158,8 @@ func (fg FastGetter) checkEligibility() (bool, int64, error) {
 }
 
 // makeRequest performs the HTTP request and returns the response object
-func (cInfo chunkInfo) makeRequest() (*http.Response, error) {
-	req, err := http.NewRequest("GET", cInfo.url, nil)
+func (cInfo *chunkInfo) makeRequest(ctx context.Context, client *http.Client) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", cInfo.url, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -166,7 +169,7 @@ func (cInfo chunkInfo) makeRequest() (*http.Response, error) {
 		req.Header.Add(key, value)
 	}
 
-	resp, err := ctxhttp.Do(cInfo.ctx, cInfo.client, req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -174,11 +177,11 @@ func (cInfo chunkInfo) makeRequest() (*http.Response, error) {
 }
 
 // getChunk fetches the part of file to download
-func (fg FastGetter) getChunk(cInfo *chunkInfo) error {
+func (fg *FastGetter) getChunk(ctx context.Context, cInfo *chunkInfo) error {
 	if fg.OnStart != nil {
 		fg.OnStart(cInfo.wid, cInfo.lim-cInfo.off)
 	}
-	resp, err := cInfo.makeRequest()
+	resp, err := cInfo.makeRequest(ctx, fg.Client)
 	if err != nil {
 		return err
 	}
